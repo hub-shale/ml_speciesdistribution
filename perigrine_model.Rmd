@@ -9,6 +9,11 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+Ben
+https://ucsb.zoom.us/j/3133990354
+Sam
+https://ucsb.zoom.us/j/4565706927
+
 ```{r}
 library(librarian)
 
@@ -30,17 +35,20 @@ dir_data <- here("data")
 dir.create(dir_data, showWarnings = F)
 ```
 
-## Load Data
+## Species Data
 
 ```{r}
 obs_csv <- file.path(dir_data, "obs.csv")
 obs_geo <- file.path(dir_data, "obs.geojson")
+redo <- TRUE
+usa_hull =st_as_sf(rgeos::readWKT("POLYGON ((-125.33203125 39.232253141714885, -114.60937499999999 25.799891182088334, -79.453125 24.686952411999155, -79.453125 31.052933985705163, -57.65624999999999 47.27922900257082, -93.8671875 49.724479188712984, -126.73828125 49.61070993807422, -125.33203125 39.232253141714885))"))
 
-if (!file.exists(obs_geo)){
+if (!file.exists(obs_geo) | redo){
   # get species occurrence data from GBIF with coordinates
   (res <- spocc::occ(
     query = 'Falco peregrinus', 
     from = 'gbif', has_coords = T,
+    geometry = usa_hull,
     limit = 20000))
   
   # extract data frame from result
@@ -64,14 +72,55 @@ nrow(obs) # number of rows
 mapview::mapview(obs, map.types = "OpenTopoMap")
 ```
 
-Though I set the limit to 20,000 ovservations, there are 1,738,469 occurrences of _Falco peregrinus_ on gbif.org as of 2022/01/05.
+Though I set the limit to 20,000 observations in the US (and there are clearly more than this, as the limit was reached), there are 1,738,469 global occurrences of _Falco peregrinus_ on gbif.org as of 2022/01/05.
 
 There are several sightings over the open ocean, which are probably erroneous. Some may not be (given that there are many sightings on nearby islands, and it is possible some birds may have been observed in flight between landmasses, particularly juveniles in search of new territory [`3399467453` in particular fits this possibility]) but to be safe I will remove all sightings not visibly over land. To remove these suspected false sightings:
 
 ```{r}
 obs = obs %>% subset(!key %in% c(3407992796, 3399467453, 3415497266, 
                                  3394760531, 3332604472))
-
+# Most of these fall outside of the hull used above, which is why only 1 observation was removed:
 nrow(obs)
+```
+
+## Environmental Data
+
+```{r}
+dir_env <- file.path(dir_data, "env")
+
+# set a default data directory
+options(sdmpredictors_datadir = dir_env)
+
+# choosing terrestrial
+env_datasets <- sdmpredictors::list_datasets(terrestrial = TRUE, marine = FALSE)
+
+# show table of datasets
+env_datasets %>% 
+  select(dataset_code, description, citation)
+
+# choose datasets for a vector
+env_datasets_vec <- c("WorldClim", "ENVIREM")
+
+# get layers
+env_layers <- sdmpredictors::list_layers(env_datasets_vec)
+
+# choose layers after some inspection and perhaps consulting literature
+env_layers_vec <- c("WC_alt", "WC_bio1", "WC_bio2", "ER_tri", "ER_topoWet")
+
+# get layers
+env_stack <- load_layers(env_layers_vec)
+
+# interactive plot layers, hiding all but first (select others)
+# mapview(env_stack, hide = T) # makes the html too big for Github
+plot(env_stack, nc=2)
+```
+
+
+
+
+
+```{r}
+mapview(
+  list(obs, usa_hull))
 ```
 
