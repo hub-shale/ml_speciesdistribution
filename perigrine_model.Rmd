@@ -35,13 +35,13 @@ dir.create(dir_data, showWarnings = F)
 ```{r}
 obs_csv <- file.path(dir_data, "obs.csv")
 obs_geo <- file.path(dir_data, "obs.geojson")
-redo    <- FALSE
 
-if (!file.exists(obs_geo) | redo){
+if (!file.exists(obs_geo)){
   # get species occurrence data from GBIF with coordinates
   (res <- spocc::occ(
     query = 'Falco peregrinus', 
-    from = 'gbif', has_coords = T))
+    from = 'gbif', has_coords = T,
+    limit = 20000))
   
   # extract data frame from result
   df <- res$gbif$data[[1]] 
@@ -57,5 +57,21 @@ if (!file.exists(obs_geo) | redo){
 }
 obs <- sf::read_sf(obs_geo)
 nrow(obs) # number of rows
+```
+
+```{r}
+# show points on map
+mapview::mapview(obs, map.types = "OpenTopoMap")
+```
+
+Though I set the limit to 20,000 ovservations, there are 1,738,469 occurrences of _Falco peregrinus_ on gbif.org as of 2022/01/05.
+
+There are several sightings over the open ocean, which are probably erroneous. Some may not be (given that there are many sightings on nearby islands, and it is possible some birds may have been observed in flight between landmasses, particularly juveniles in search of new territory [`3399467453` in particular fits this possibility]) but to be safe I will remove all sightings not visibly over land. To remove these suspected false sightings:
+
+```{r}
+obs = obs %>% subset(!key %in% c(3407992796, 3399467453, 3415497266, 
+                                 3394760531, 3332604472))
+
+nrow(obs)
 ```
 
