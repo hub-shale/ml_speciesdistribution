@@ -115,6 +115,11 @@ env_stack <- load_layers(env_layers_vec)
 plot(env_stack, nc=2)
 ```
 
+```{r}
+# file access worked using bash: `curl -v -k https://www.lifewatch.be/sdmpredictors/WC_alt_lonlat.tif --output WC_alt.tif`
+l1 = raster(here("WC_alt.tif"))
+plot(l1)
+```
 
 
 
