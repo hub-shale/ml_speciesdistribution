@@ -103,29 +103,45 @@ env_datasets_vec <- c("WorldClim", "ENVIREM")
 
 # get layers
 env_layers <- sdmpredictors::list_layers(env_datasets_vec)
-
-# choose layers after some inspection and perhaps consulting literature
-env_layers_vec <- c("WC_alt", "WC_bio1", "WC_bio2", "ER_tri", "ER_topoWet")
-
-# get layers
-env_stack <- load_layers(env_layers_vec)
-
-# interactive plot layers, hiding all but first (select others)
-# mapview(env_stack, hide = T) # makes the html too big for Github
-plot(env_stack, nc=2)
 ```
-
-```{r}
-# file access worked using bash: `curl -v -k https://www.lifewatch.be/sdmpredictors/WC_alt_lonlat.tif --output WC_alt.tif`
-l1 = raster(here("WC_alt.tif"))
-plot(l1)
-```
-
-
-
 
 ```{r}
 mapview(
   list(obs, usa_hull))
+```
+
+```{bash, eval=FALSE}
+for item in WC_alt WC_bio1 WC_bio2 ER_tri ER_topoWet
+do
+	curl -v -k https://www.lifewatch.be/sdmpredictors/${item}.tif --output data/${item}.tif
+done
+```
+
+```{r}
+env_layer_file_vec <- paste0("data/", list.files(here("data"), pattern = "*.tif"), sep = "")
+
+env_stack <- raster::stack(env_layer_file_vec)
+
+plot(env_stack, nc=2)
+```
+
+For some reason this is yielding blank plots:
+
+```{r}
+env_stack_grd <- file.path(dir_data, "env_stack.grd")
+
+# this if was throwing errors, so i just removed it
+# if (!file.exists(env_stack_grd) | redo){
+  obs_hull_sp <- sf::as_Spatial(usa_hull)
+  env_stack <- raster::mask(env_stack, obs_hull_sp) %>% 
+    raster::crop(extent(obs_hull_sp))
+  writeRaster(env_stack, env_stack_grd, overwrite=T)  
+# }
+env_stack <- stack(env_stack_grd)
+
+# show map
+# mapview(obs) + 
+#   mapview(env_stack, hide = T) # makes html too big for Github
+plot(env_stack, nc=2)
 ```
 
