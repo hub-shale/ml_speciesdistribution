@@ -36,7 +36,7 @@ dir.create(dir_data, showWarnings = F)
 ```{r}
 obs_csv <- file.path(dir_data, "obs.csv")
 obs_geo <- file.path(dir_data, "obs.geojson")
-redo    <- FALSE
+redo    <- TRUE
 
 if (!file.exists(obs_geo) | redo){
   # get species occurrence data from GBIF with coordinates
@@ -54,7 +54,8 @@ if (!file.exists(obs_geo) | redo){
     sf::st_as_sf(
       coords = c("longitude", "latitude"),
       crs = st_crs(4326)) %>% 
-    select(prov, key) # save space (joinable from obs_csv)
+    select(prov, key) %>% # save space (joinable from obs_csv)
+    subset(!key %in% c(861689291, 1050659944, 1145541957, 686703568)) 
   sf::write_sf(obs, obs_geo, delete_dsn=T)
 }
 obs <- sf::read_sf(obs_geo)
@@ -64,6 +65,12 @@ nrow(obs) # number of rows
 ```{r}
 mapview::mapview(obs, map.types = "OpenTopoMap")
 ```
+
+Several observations were rerecorded with a lat/long of (0,0) as indicated by the dots off the coast of Africa (visible if the above code is run without line 58). Additionally, an investigation of Gila Monster habitat on Google shows that the points in the Midwest and California coast are far out of habitable range. Sources disagree on whether or not the true range extends into southern Mexico, so for the purposes of this analysis those observations will remain in the dataset.
+
+After removing these four bad observations, we are left with `r nrow(obs)` observations of _Heloderma suspectum_ from the GBIF database.
+
+
 
 ## Environmental Data
 
@@ -75,10 +82,6 @@ options(sdmpredictors_datadir = dir_env)
 
 # choosing terrestrial
 env_datasets <- sdmpredictors::list_datasets(terrestrial = TRUE, marine = FALSE)
-
-# show table of datasets
-env_datasets %>% 
-  select(dataset_code, description, citation)
 
 # choose datasets for a vector
 env_datasets_vec <- c("WorldClim", "ENVIREM")
@@ -114,7 +117,7 @@ obs_hull <- read_sf(obs_hull_geo)
 ```{r}
 # show points on map
 mapview(
-  list(obs, obs_hull))
+  list(obs, obs_hull), map.types = "OpenTopoMap")
 ```
 
 ```{r}
