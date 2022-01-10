@@ -1,7 +1,7 @@
 ---
-title: "perigrine_distribution"
+title: "gila_model"
 author: "Shale"
-date: "1/5/2022"
+date: "1/9/2022"
 output: html_document
 ---
 
@@ -36,18 +36,14 @@ dir.create(dir_data, showWarnings = F)
 ```{r}
 obs_csv <- file.path(dir_data, "obs.csv")
 obs_geo <- file.path(dir_data, "obs.geojson")
-redo <- TRUE
-usa_hull =st_as_sf(rgeos::readWKT("POLYGON ((-125.33203125 39.232253141714885, -114.60937499999999 25.799891182088334, -79.453125 24.686952411999155, -79.453125 31.052933985705163, -57.65624999999999 47.27922900257082, -93.8671875 49.724479188712984, -126.73828125 49.61070993807422, -125.33203125 39.232253141714885))"))
-
-usa_hull <- usa_hull %>% st_set_crs(4326) # %>% st_transform(crs = 4978)
+redo    <- FALSE
 
 if (!file.exists(obs_geo) | redo){
   # get species occurrence data from GBIF with coordinates
   (res <- spocc::occ(
-    query = 'Falco peregrinus', 
+    query = 'Heloderma suspectum', 
     from = 'gbif', has_coords = T,
-    geometry = usa_hull,
-    limit = 200))
+    limit = 10000))
   
   # extract data frame from result
   df <- res$gbif$data[[1]] 
@@ -66,19 +62,7 @@ nrow(obs) # number of rows
 ```
 
 ```{r}
-# show points on map
 mapview::mapview(obs, map.types = "OpenTopoMap")
-```
-
-Though I set the limit to 20,000 observations in the US (and there are clearly more than this, as the limit was reached), there are 1,738,469 global occurrences of _Falco peregrinus_ on gbif.org as of 2022/01/05.
-
-There are several sightings over the open ocean, which are probably erroneous. Some may not be (given that there are many sightings on nearby islands, and it is possible some birds may have been observed in flight between landmasses, particularly juveniles in search of new territory [`3399467453` in particular fits this possibility]) but to be safe I will remove all sightings not visibly over land. To remove these suspected false sightings:
-
-```{r}
-obs = obs %>% subset(!key %in% c(3407992796, 3399467453, 3415497266, 
-                                 3394760531, 3332604472))
-# Most of these fall outside of the hull used above, which is why only 1 observation was removed:
-nrow(obs)
 ```
 
 ## Environmental Data
@@ -101,28 +85,17 @@ env_datasets_vec <- c("WorldClim", "ENVIREM")
 
 # get layers
 env_layers <- sdmpredictors::list_layers(env_datasets_vec)
-```
 
-```{r}
-mapview(
-  list(obs, usa_hull), map.types = "OpenTopoMap")
-```
+# choose layers after some inspection and perhaps consulting literature
+env_layers_vec <- c("WC_alt", "WC_bio1", "WC_bio2", "ER_tri", "ER_topoWet")
 
-```{bash, eval=FALSE}
-for item in WC_alt WC_bio1 WC_bio2 ER_tri ER_topoWet
-do
-	curl -v -k https://www.lifewatch.be/sdmpredictors/${item}.tif --output data/${item}.tif
-done
-```
+# get layers
+env_stack <- load_layers(env_layers_vec)
 
-```{r}
-env_layer_file_vec <- paste0("data/", list.files(here("data"), pattern = "*.tif"), sep = "")
-
-env_stack <- raster::stack(env_layer_file_vec)
-
+# interactive plot layers, hiding all but first (select others)
+# mapview(env_stack, hide = T) # makes the html too big for Github
 plot(env_stack, nc=2)
 ```
-
 
 ```{r}
 obs_hull_geo  <- file.path(dir_data, "obs_hull.geojson")
@@ -133,32 +106,34 @@ if (!file.exists(obs_hull_geo) | redo){
   obs_hull <- sf::st_convex_hull(st_union(obs))
   
   # save obs hull
-#  write_sf(obs_hull, obs_hull_geo)
+  write_sf(obs_hull, obs_hull_geo)
 }
-# obs_hull <- read_sf(obs_hull_geo)
+obs_hull <- read_sf(obs_hull_geo)
 ```
 
+```{r}
+# show points on map
+mapview(
+  list(obs, obs_hull))
+```
 
 ```{r}
-# usa_hull <- usa_hull %>% st_set_crs(4326)
-# st_transform(usa_hull, crs = 4978)
-
-# this_crs <- st_crs(env_stack)
-# st_transform(usa_hull, crs = this_crs$wkt)
-
-# if (!file.exists(env_stack_grd) | redo){
-  obs_hull_sp <- sf::as_Spatial(usa_hull)
+if (!file.exists(env_stack_grd) | redo){
+  obs_hull_sp <- sf::as_Spatial(obs_hull)
   env_stack <- raster::mask(env_stack, obs_hull_sp) %>% 
     raster::crop(extent(obs_hull_sp))
- # writeRaster(env_stack, env_stack_grd, overwrite=T)  
+  writeRaster(env_stack, env_stack_grd, overwrite=T)  
 }
-#env_stack <- stack(env_stack_grd)
+env_stack <- stack(env_stack_grd)
 
 # show map
 # mapview(obs) + 
 #   mapview(env_stack, hide = T) # makes html too big for Github
 plot(env_stack, nc=2)
 ```
+
+## Create & Combine Pseudo-Absences
+
 ```{r}
 absence_geo <- file.path(dir_data, "absence.geojson")
 pts_geo     <- file.path(dir_data, "pts.geojson")
@@ -184,9 +159,76 @@ if (!file.exists(absence_geo) | redo){
   write_sf(absence, absence_geo, delete_dsn=T)
 }
 absence <- read_sf(absence_geo)
+```
 
-# show map of presence, ie obs, and absence
+
+```{r}
+# show map of presence (ie obs) and absence
 mapview(obs, col.regions = "green") + 
   mapview(absence, col.regions = "gray")
+```
+
+```{r}
+if (!file.exists(pts_env_csv) | redo){
+
+  # combine presence and absence into single set of labeled points 
+  pts <- rbind(
+    obs %>% 
+      mutate(
+        present = 1) %>% 
+      select(present, key),
+    absence %>% 
+      mutate(
+        present = 0,
+        key     = NA)) %>% 
+    mutate(
+      ID = 1:n()) %>% 
+    relocate(ID)
+  write_sf(pts, pts_geo, delete_dsn=T)
+
+  # extract raster values for points
+  pts_env <- raster::extract(env_stack, as_Spatial(pts), df=TRUE) %>% 
+    tibble() %>% 
+    # join present and geometry columns to raster value results for points
+    left_join(
+      pts %>% 
+        select(ID, present),
+      by = "ID") %>% 
+    relocate(present, .after = ID) %>% 
+    # extract lon, lat as single columns
+    mutate(
+      #present = factor(present),
+      lon = st_coordinates(geometry)[,1],
+      lat = st_coordinates(geometry)[,2]) %>% 
+    select(-geometry)
+  write_csv(pts_env, pts_env_csv)
+}
+pts_env <- read_csv(pts_env_csv)
+```
+
+```{r}
+pts_env %>% 
+  # show first 10 presence, last 10 absence
+  slice(c(1:10, (nrow(pts_env)-9):nrow(pts_env)))
+```
+
+## Term Plots
+
+```{r}
+pts_env %>% 
+  select(-ID) %>% 
+  mutate(
+    present = factor(present)) %>% 
+  pivot_longer(-present) %>% 
+  ggplot() +
+  geom_density(aes(x = value, fill = present)) + 
+  scale_fill_manual(values = alpha(c("gray", "green"), 0.5)) +
+  scale_x_continuous(expand=c(0,0)) +
+  scale_y_continuous(expand=c(0,0)) +
+  theme_bw() + 
+  facet_wrap(~name, scales = "free") +
+  theme(
+    legend.position = c(1, 0),
+    legend.justification = c(1, 0))
 ```
 
