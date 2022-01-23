@@ -109,6 +109,7 @@ p3 <- partial(mdl_caret, pred.var = c("lat", "WC_bio2")) %>%
 # Display plots side by side
 gridExtra::grid.arrange(p1, p2, p3, ncol = 3)
 ```
+
 ## Random Forests
 
 ```{r}
