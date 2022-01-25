@@ -36,7 +36,7 @@ dir.create(dir_data, showWarnings = F)
 ```{r}
 obs_csv <- file.path(dir_data, "obs.csv")
 obs_geo <- file.path(dir_data, "obs.geojson")
-redo    <- TRUE
+redo    <- FALSE
 
 if (!file.exists(obs_geo) | redo){
   # get species occurrence data from GBIF with coordinates
